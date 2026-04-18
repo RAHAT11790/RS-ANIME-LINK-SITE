@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Functions ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+    function isValidLink(data) {
+      return data.slug is string && data.slug.size() <= 50 &&
+             data.originalUrl is string && data.originalUrl.size() <= 2048 &&
+             data.userId is string && data.userId.size() == 28 &&
+             data.clicks is number && data.clicks >= 0 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidProfile(data) {
+      return data.email is string && data.email.size() <= 256 &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.totalClicks is number && data.totalClicks >= 0;
+    }
+
+    // --- Rules ---
+
+    // Profiles
+    match /profiles/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidProfile(incoming()) && incoming().totalClicks == 0;
+      allow update: if isOwner(userId) && isValidProfile(incoming()) && 
+                    incoming().email == existing().email && // Immutable email
+                    incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'totalClicks']);
+    }
+
+    // Links
+    match /links/{linkId} {
+      // Anyone can get or list if they are part of a query filtering by slug (for bridge)
+      // or if they are the owner.
+      allow get: if true; 
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() && 
+                    incoming().userId == request.auth.uid &&
+                    isValidLink(incoming()) &&
+                    incoming().clicks == 0 &&
+                    incoming().createdAt == request.time;
+      
+      allow update: if isSignedIn() && (
+        // Action: Owner Update
+        (isOwner(existing().userId) && isValidLink(incoming()) && 
+         incoming().userId == existing().userId && // Immutable owner
+         incoming().createdAt == existing().createdAt && // Immutable timestamp
+         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'originalUrl', 'isPrivate', 'slug'])) ||
+        
+        // Action: Click Increment (Anonymous/Anyone)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['clicks']) && 
+         incoming().clicks == existing().clicks + 1)
+      );
+
+      allow delete: if isOwner(existing().userId);
+
+      // Link Stats Subcollection
+      match /stats/{statId} {
+        allow create: if true; // Recording a click
+        allow get, list: if isOwner(get(/databases/$(database)/documents/links/$(linkId)).data.userId);
+      }
+    }
+
+    // Test health connection
+    match /test/connection {
+      allow get: if true;
+    }
+  }
+}

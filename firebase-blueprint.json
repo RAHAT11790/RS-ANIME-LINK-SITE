@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "Link": {
+      "title": "Link",
+      "description": "A shortened link entry.",
+      "type": "object",
+      "properties": {
+        "slug": { "type": "string", "description": "The custom or generated short alias." },
+        "originalUrl": { "type": "string", "description": "The destination URL." },
+        "userId": { "type": "string", "description": "The ID of the user who created the link." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "clicks": { "type": "number", "description": "Total click count." },
+        "title": { "type": "string", "description": "Optional title for the link." },
+        "isPrivate": { "type": "boolean", "description": "Whether the link is visible in public lists (if applicable)." }
+      },
+      "required": ["slug", "originalUrl", "userId", "createdAt", "clicks"]
+    },
+    "Stat": {
+      "title": "Stat",
+      "description": "Click analytics for a specific link.",
+      "type": "object",
+      "properties": {
+        "linkId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "ip": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "referer": { "type": "string" },
+        "country": { "type": "string" }
+      },
+      "required": ["linkId", "timestamp"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "User profile settings.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "totalClicks": { "type": "number", "default": 0 }
+      },
+      "required": ["email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/links/{linkId}": {
+      "schema": "Link",
+      "description": "Stored shortened links."
+    },
+    "/links/{linkId}/stats/{statId}": {
+      "schema": "Stat",
+      "description": "Detailed analytics for each link."
+    },
+    "/profiles/{userId}": {
+      "schema": "Profile",
+      "description": "User account information."
+    }
+  }
+}
